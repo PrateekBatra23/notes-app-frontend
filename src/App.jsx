@@ -3,14 +3,24 @@ import { useState, useEffect } from 'react';
 
 
 function App() {
-  const [notes, setNotes] = useState(() => {
-    const savedNotes = localStorage.getItem('notes');
-    return savedNotes ? JSON.parse(savedNotes) : [];
-  });
+  const [notes, setNotes] = useState([]);
 
-  useEffect(() => {
-  localStorage.setItem('notes', JSON.stringify(notes));
-  }, [notes]);
+useEffect(() => {
+  const fetchNotes = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/notes');
+      if (!response.ok) throw new Error('Failed to fetch notes');
+      const data = await response.json();
+      setNotes(data);
+    } catch (error) {
+      console.error(error);
+      alert('Could not load notes');
+    }
+  };
+
+  fetchNotes();
+}, []);
+
 
   const [title,setTitle]=useState('');
   const [content,setContent]=useState('');
@@ -20,37 +30,76 @@ function App() {
 
  
 
-  const handleSave = () => {
+  const handleSave = async() => {
   if (!title.trim() || !content.trim()) return;
 
+  
   if (isEditing) {
-    const updatedNotes = notes.map(note =>
-      note.id === editId ? { ...note, title, content } : note
-    );
-    setNotes(updatedNotes);
-    setIsEditing(false);
-    setEditId(null);
-  } else {
-    const newNote = {
-      id: Date.now(),
-      title,
-      content,
-      createdAt: new Date().toISOString()
-    };
-    setNotes([newNote, ...notes]);
-  }
+      try {
+        const response = await fetch(`http://localhost:5000/api/notes/${editId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ title, content }),
+        });
 
-  setTitle('');
-  setContent('');
+        if (!response.ok) throw new Error('Failed to update note');
+
+        const {note:updatedNote} = await response.json();
+        const updatedNotes = notes.map(note =>
+          note._id === editId ? updatedNote : note
+        );
+
+        setNotes(updatedNotes);
+        setIsEditing(false);
+        setEditId(null);
+        setTitle('');
+        setContent('');
+      } catch (error) {
+        console.error(error);
+        alert('Could not update note.');
+      }
+  }
+  else {
+          const newNote = {
+          title,
+          content
+          };
+
+        try {
+          const response = await fetch('http://localhost:5000/api/notes', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(newNote),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to add note');
+          }
+
+          const data = await response.json();
+          setNotes([data.note, ...notes]);
+          setTitle('');
+          setContent('');
+        } catch (error) {
+          console.error(error);
+          alert('Could not save note.');
+        }
+  }
 };
 
-  const editNote = (id) => {
-  const noteToEdit = notes.find(note => note.id === id);
+
+
+  const editNote = (_id) => {
+  const noteToEdit = notes.find(note => note._id === _id);
   if (!noteToEdit) return;
   setTitle(noteToEdit.title);
   setContent(noteToEdit.content);
   setIsEditing(true);
-  setEditId(id);
+  setEditId(_id);
 };
 const cancelEdit = () => {
   setIsEditing(false);
@@ -61,14 +110,31 @@ const cancelEdit = () => {
 
 
   const filteredNotes = notes.filter(note =>
-  note.title.toLowerCase().includes(searchText.toLowerCase()) ||
-  note.content.toLowerCase().includes(searchText.toLowerCase())
-  );
+  note?.title?.toLowerCase().includes(searchText.toLowerCase()) ||
+  note?.content?.toLowerCase().includes(searchText.toLowerCase())
+);
 
 
-  const deleteNote = (id) => {
-  setNotes(notes.filter(note => note.id !== id));
-  };
+
+const deleteNote = async (_id) => {
+  try {
+    const response = await fetch(`http://localhost:5000/api/notes/${_id}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to delete note');
+    }
+
+    setNotes(notes.filter(note => note._id !== _id));
+  } catch (error) {
+    console.error('Delete error:', error);
+    alert('Could not delete note.');
+  }
+};
+
+
 
   return (
     <div className='body'>
@@ -116,18 +182,18 @@ const cancelEdit = () => {
               <p className="no-notes">No notes</p>
             ) : (
               filteredNotes.map((note) => (
-                <div key={note.id} className="note-card">
+                <div key={note._id} className="note-card">
                   <h3>{note.title}</h3>
                   <p>{note.content}</p>
                   <small>Created: {new Date(note.createdAt).toLocaleString()}</small>
                   <button
-                    onClick={() => deleteNote(note.id)}
+                    onClick={() => deleteNote(note._id)}
                     className="delete-btn"
                   >
                     Delete
                   </button>
                     <button
-                    onClick={() => editNote(note.id)}
+                    onClick={() => editNote(note._id)}
                     className="edit-btn"
                     >
                     Edit
